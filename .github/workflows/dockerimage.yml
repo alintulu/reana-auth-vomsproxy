@@ -20,3 +20,4 @@ jobs:
           context: ${{ github.workspace }}
           tags: latest
           tag_with_sha: true
+          build_args: DATE=$(date +"%Y-%m-%d"), VERSION=${{ github.sha }}
