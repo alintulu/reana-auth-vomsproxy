@@ -4,6 +4,7 @@ on:
   push:
     paths:
     - 'Dockerfile'
+    - '.github/workflows/dockerimage.yml'
 
 jobs:
   build:
