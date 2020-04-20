@@ -1,0 +1,67 @@
+stages:
+    - build
+    - obtain
+    - test
+
+docker:
+    stage: build
+    rules:
+    - changes:
+      - Dockerfile
+    tags:
+        - docker-image-build
+    script: "echo" # unused but this line is required by GitLab CI
+    variables:
+      TO: $CI_REGISTRY_IMAGE:$CI_BUILD_REF_NAME
+
+obtain cms proxy:
+    stage: obtain
+    image: $CI_REGISTRY_IMAGE:$CI_BUILD_REF_NAME
+    variables:
+      VO: cms
+    artifacts:
+      # artifacts:untracked ignores configuration in the repository’s .gitignore file.
+      untracked: true
+      expire_in: 5 minutes
+      paths:
+      - proxy
+    script:
+      - mkdir -p ${HOME}/.globus
+      - printf $GRID_USERCERT | base64 -d > ${HOME}/.globus/usercert.pem
+      - printf $GRID_USERKEY | base64 -d > ${HOME}/.globus/userkey.pem
+      - chmod 400 ${HOME}/.globus/userkey.pem
+      # Limit validity to 5 minutes
+      - mkdir proxy
+      - echo ${GRID_PASSWORD} | voms-proxy-init --voms ${VO} --valid 0:5 --pwstdin --out proxy/x509up_${VO}
+      #- voms-proxy-info --all
+      #- export VOMSPROXY=$(voms-proxy-info -path)
+      #- mkdir proxy
+      #- cp ${VOMSPROXY} proxy/x509up_${VO}
+      #- voms-proxy-destroy
+
+test cms proxy:
+    stage: test
+    image: $CI_REGISTRY_IMAGE:$CI_BUILD_REF_NAME
+    variables:
+      VO: cms
+      X509_USER_PROXY: /proxy/x509up_${VO}
+    script:
+      #- export X509_USER_PROXY=${PWD}/proxy/x509_proxy
+      - voms-proxy-info --all #--file /tmp/x509up_${VO}
+    needs: ["obtain cms proxy"]
+    when: on_success
+
+
+test dasgoclient cvmfs cms:
+    stage: test
+    tags:
+    - cvmfs
+    variables:
+      VO: cms
+      X509_USER_PROXY: /proxy/x509up_${VO}
+      CMS_PATH: /cvmfs/cms.cern.ch
+    script:
+      - source ${CMS_PATH}/cmsset_default.sh
+      - dasgoclient -query="dataset=/ZMM*/*/*"
+    needs: ["obtain cms proxy"]
+    when: on_success
